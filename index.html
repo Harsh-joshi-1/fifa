@@ -1,43 +1,37 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
 <meta charset="UTF-8">
-<meta name="google-site-verification" content="iCGarHWQfwhfwlbiQlCcZESXiRc0NMqlveQgpNOzNr8" /> 
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Football Streams</title>
 
 <style>
 body{
-    margin:0;
-    padding:20px;
     background:#000;
     color:#fff;
     font-family:Arial,sans-serif;
+    margin:0;
+    padding:20px;
 }
 
 .item{
     padding:12px;
-    margin:6px 0;
     border:1px solid #333;
+    margin-bottom:8px;
     cursor:pointer;
-}
-
-.item:hover{
-    background:#111;
 }
 
 button{
-    padding:10px 15px;
+    padding:10px;
     margin-bottom:15px;
-    cursor:pointer;
 }
 
 iframe{
     position:fixed;
     top:0;
     left:0;
-    width:100vw;
-    height:100vh;
+    width:100%;
+    height:100%;
     border:none;
 }
 </style>
@@ -47,76 +41,105 @@ iframe{
 <div id="app">Loading football streams...</div>
 
 <script>
-const API_URL = "https://dami-tv.pro/papi/api/streams";
+var API_URL = "https://dami-tv.pro/papi/api/streams";
+var footballStreams = [];
 
-let footballStreams = [];
+function loadStreams() {
 
-fetch(API_URL)
-.then(res => res.json())
-.then(data => {
+    var xhr = new XMLHttpRequest();
 
-    const footballCategory = data.streams.find(
-        category => category.category.toLowerCase() === "football"
-    );
+    xhr.onreadystatechange = function() {
 
-    if (!footballCategory) {
-        document.getElementById("app").innerHTML =
-            "<h2>No football streams found</h2>";
-        return;
-    }
+        if (xhr.readyState !== 4) {
+            return;
+        }
 
-    footballStreams = footballCategory.streams;
-    showMatches();
+        if (xhr.status !== 200) {
+            document.getElementById("app").innerHTML =
+                "Failed to load API<br>Status: " + xhr.status;
+            return;
+        }
 
-})
-.catch(err => {
-    document.getElementById("app").innerHTML =
-        "<h2>Failed to load streams</h2>";
-    console.error(err);
-});
+        try {
+
+            var data = JSON.parse(xhr.responseText);
+
+            var footballCategory = null;
+
+            for (var i = 0; i < data.streams.length; i++) {
+
+                if (
+                    data.streams[i].category &&
+                    data.streams[i].category.toLowerCase() === "football"
+                ) {
+                    footballCategory = data.streams[i];
+                    break;
+                }
+            }
+
+            if (!footballCategory) {
+                document.getElementById("app").innerHTML =
+                    "Football category not found";
+                return;
+            }
+
+            footballStreams = footballCategory.streams;
+            showMatches();
+
+        } catch (e) {
+
+            document.getElementById("app").innerHTML =
+                "JSON Error: " + e.message;
+        }
+    };
+
+    xhr.open("GET", API_URL, true);
+    xhr.send();
+}
 
 function showMatches() {
 
-    let html = "<h2>Football Streams</h2>";
+    var html = "<h2>Football Streams</h2>";
 
-    footballStreams.forEach((match,index) => {
+    for (var i = 0; i < footballStreams.length; i++) {
 
-        html += `
-            <div class="item" onclick="showSources(${index})">
-                ${match.name}
-                <br>
-                <small>${match.status}</small>
-            </div>
-        `;
-    });
+        html +=
+            '<div class="item" onclick="showSources(' + i + ')">' +
+            footballStreams[i].name +
+            ' [' + footballStreams[i].status + ']' +
+            '</div>';
+    }
 
     document.getElementById("app").innerHTML = html;
 }
 
 function showSources(index) {
 
-    const match = footballStreams[index];
+    var match = footballStreams[index];
 
-    let html = `
-        <button onclick="showMatches()">← Back</button>
-        <h2>${match.name}</h2>
-    `;
+    var html =
+        '<button onclick="showMatches()">Back</button>' +
+        '<h2>' + match.name + '</h2>';
 
     if (!match.sources || match.sources.length === 0) {
-        html += "<p>No sources available</p>";
+
+        html += '<div>No sources available</div>';
+
     } else {
 
-        match.sources.forEach(source => {
+        for (var i = 0; i < match.sources.length; i++) {
 
-            const url = source.embed || match.iframe;
+            var source = match.sources[i];
 
-            html += `
-                <div class="item"
-                     onclick="openStream('${url}')">
-                    ${source.source || "Stream"}
-                </div>
-            `;
-        });
+            var url = source.embed;
+
+            html +=
+                '<div class="item" onclick="openStream(\'' +
+                url +
+                '\')">' +
+                (source.source || ('Source ' + (i + 1))) +
+                '</div>';
+        }
     }
 
     document.getElementById("app").innerHTML = html;
@@ -124,13 +147,13 @@ function showSources(index) {
 
 function openStream(url) {
 
-    document.body.innerHTML = `
-        <iframe
-            src="${url}"
-            allowfullscreen>
-        </iframe>
-    `;
+    document.body.innerHTML =
+        '<iframe src="' +
+        url +
+        '" allowfullscreen></iframe>';
 }
+
+loadStreams();
 </script>
 
 </body>
