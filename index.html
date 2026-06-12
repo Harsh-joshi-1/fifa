@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Football Streams</title>
+
+<style>
+body{
+    margin:0;
+    padding:20px;
+    background:#000;
+    color:#fff;
+    font-family:Arial,sans-serif;
+}
+
+.item{
+    padding:12px;
+    margin:6px 0;
+    border:1px solid #333;
+    cursor:pointer;
+}
+
+.item:hover{
+    background:#111;
+}
+
+button{
+    padding:10px 15px;
+    margin-bottom:15px;
+    cursor:pointer;
+}
+
+iframe{
+    position:fixed;
+    top:0;
+    left:0;
+    width:100vw;
+    height:100vh;
+    border:none;
+}
+</style>
+</head>
+<body>
+
+<div id="app">Loading football streams...</div>
+
+<script>
+const API_URL = "https://dami-tv.pro/papi/api/streams";
+
+let footballStreams = [];
+
+fetch(API_URL)
+.then(res => res.json())
+.then(data => {
+
+    const footballCategory = data.streams.find(
+        category => category.category.toLowerCase() === "football"
+    );
+
+    if (!footballCategory) {
+        document.getElementById("app").innerHTML =
+            "<h2>No football streams found</h2>";
+        return;
+    }
+
+    footballStreams = footballCategory.streams;
+    showMatches();
+
+})
+.catch(err => {
+    document.getElementById("app").innerHTML =
+        "<h2>Failed to load streams</h2>";
+    console.error(err);
+});
+
+function showMatches() {
+
+    let html = "<h2>Football Streams</h2>";
+
+    footballStreams.forEach((match,index) => {
+
+        html += `
+            <div class="item" onclick="showSources(${index})">
+                ${match.name}
+                <br>
+                <small>${match.status}</small>
+            </div>
+        `;
+    });
+
+    document.getElementById("app").innerHTML = html;
+}
+
+function showSources(index) {
+
+    const match = footballStreams[index];
+
+    let html = `
+        <button onclick="showMatches()">← Back</button>
+        <h2>${match.name}</h2>
+    `;
+
+    if (!match.sources || match.sources.length === 0) {
+        html += "<p>No sources available</p>";
+    } else {
+
+        match.sources.forEach(source => {
+
+            const url = source.embed || match.iframe;
+
+            html += `
+                <div class="item"
+                     onclick="openStream('${url}')">
+                    ${source.source || "Stream"}
+                </div>
+            `;
+        });
+    }
+
+    document.getElementById("app").innerHTML = html;
+}
+
+function openStream(url) {
+
+    document.body.innerHTML = `
+        <iframe
+            src="${url}"
+            allowfullscreen>
+        </iframe>
+    `;
+}
+</script>
+
+</body>
+</html>
