@@ -1,140 +1,381 @@
+
 <!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
-  <meta charset="utf-8">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Redirector</title>
 </head>
 
 <body>
+
   <!-- Admin View -->
   <div id="admin-view" style="display:none;">
+
     <h2>Redirector Admin</h2>
-    <p>Current Target: <a id="current-url" href="#" target="_blank">Loading...</a></p>
+
+    <p>
+      Current Target:
+      <a id="current-url" href="#" target="_blank">
+        Loading...
+      </a>
+    </p>
 
     <form id="admin-form">
-      <label for="new-url">Change Destination URL:</label><br>
-      <input type="text" id="new-url" size="45" required placeholder="https://example.com"><br><br>
 
-      <label for="write-key">Bucket Write Key (if your bucket is protected):</label><br>
-      <input type="password" id="write-key" size="45" placeholder="Optional Write Key"><br><br>
+      <label for="new-url">Change Destination URL:</label>
+      <br>
+
+      <input
+        type="url"
+        id="new-url"
+        size="45"
+        required
+        placeholder="https://example.com"
+      >
+
+      <br><br>
+
+      <label for="access-key">JSONBin Access Key:</label>
+      <br>
+
+      <input
+        type="password"
+        id="access-key"
+        size="45"
+        required
+        placeholder="Enter your Access Key"
+      >
+
+      <br><br>
 
       <button type="submit">Save Globally</button>
+
     </form>
 
-    <p id="status-msg" style="color:green; font-weight:bold;"></p>
-    <p><a href="?">Test Redirect (/)</a></p>
+    <p id="status-msg"></p>
+
+    <p>
+      <a href="./">Test Redirect (/)</a>
+    </p>
+
   </div>
+
 
   <!-- Redirect View -->
   <div id="redirect-view" style="display:none;">
-    <p>Redirecting to <a id="dest-link" href="#">...</a></p>
-    <p><small>If you are not redirected automatically, click the link above.</small></p>
-    <p><a href="#admin"><small>Admin Settings</small></a></p>
+
+    <p>
+      Redirecting to
+      <a id="dest-link" href="#">Loading...</a>
+    </p>
+
+    <p>
+      <small>
+        If you are not redirected automatically,
+        click the link above.
+      </small>
+    </p>
+
+    <p>
+      <a href="./admin">
+        <small>Admin Settings</small>
+      </a>
+    </p>
+
   </div>
 
-  <script>
-    // Global free persistent Key-Value store (KVdb.io bucket)
-    const BUCKET_ID = 'LtMMEANGu6SRaJVRogKVkD';
-    const KV_URL = 'https://kvdb.io/' + BUCKET_ID + '/target_url';
-    const DEFAULT_URL = 'https://example.com';
 
-    // Route detection
+  <script>
+
+    // ==================================
+    // JSONBin Configuration
+    // ==================================
+
+    const BIN_ID = "6aeda156ac6210605a71c3cc";
+
+    const API_URL =
+      `https://api.jsonbin.io/v3/b/${BIN_ID}`;
+
+    const DEFAULT_URL = "https://example.com";
+
+
+    // ==================================
+    // URL Validation
+    // ==================================
+
+    function validateURL(url) {
+
+      try {
+
+        const parsed = new URL(url);
+
+        if (
+          parsed.protocol !== "https:" &&
+          parsed.protocol !== "http:"
+        ) {
+          return false;
+        }
+
+        return true;
+
+      } catch {
+
+        return false;
+
+      }
+
+    }
+
+
+    // ==================================
+    // Fetch Latest URL
+    // ==================================
+
+    async function getRedirectUrl() {
+
+      const response = await fetch(
+        `${API_URL}/latest`,
+        {
+          cache: "no-store"
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Unable to fetch URL from JSONBin");
+      }
+
+      const data = await response.json();
+
+      const url = data.record.redirectUrl;
+
+      if (!url || !validateURL(url)) {
+        throw new Error("Invalid destination URL in JSONBin");
+      }
+
+      return url;
+
+    }
+
+
+    // ==================================
+    // Update URL
+    // ==================================
+
+    async function updateRedirectUrl(url, accessKey) {
+
+      const response = await fetch(API_URL, {
+
+        method: "PUT",
+
+        headers: {
+          "Content-Type": "application/json",
+          "X-Access-Key": accessKey
+        },
+
+        body: JSON.stringify({
+          redirectUrl: url
+        })
+
+      });
+
+      if (!response.ok) {
+
+        const error = await response.text();
+
+        throw new Error(
+          error || `HTTP Error ${response.status}`
+        );
+
+      }
+
+      return true;
+
+    }
+
+
+    // ==================================
+    // Route Detection
+    // ==================================
+
     const path = window.location.pathname;
+
     const hash = window.location.hash;
-    const search = window.location.search;
-    const isAdmin = path.endsWith('/admin') ||
-      hash === '#admin' ||
-      hash === '#/admin' ||
-      search.includes('admin');
+
+    const params = new URLSearchParams(
+      window.location.search
+    );
+
+    const isAdmin =
+      path.replace(/\/+$/, "").endsWith("/admin") ||
+      hash === "#admin" ||
+      hash === "#/admin" ||
+      params.has("admin");
+
+
+    // ==================================
+    // ADMIN PAGE
+    // ==================================
 
     if (isAdmin) {
-      document.getElementById('admin-view').style.display = 'block';
-      const currentUrlEl = document.getElementById('current-url');
-      const inputEl = document.getElementById('new-url');
-      const writeKeyEl = document.getElementById('write-key');
-      const msgEl = document.getElementById('status-msg');
 
-      // Pre-fill write key if saved previously
-      writeKeyEl.value = localStorage.getItem('kvdb_write_key') || '';
+      document.getElementById("admin-view").style.display =
+        "block";
 
-      // Fetch the current universal truth
-      fetch(KV_URL)
-        .then(res => res.ok ? res.text() : DEFAULT_URL)
+      const currentUrl =
+        document.getElementById("current-url");
+
+      const input =
+        document.getElementById("new-url");
+
+      const accessKey =
+        document.getElementById("access-key");
+
+      const status =
+        document.getElementById("status-msg");
+
+
+      // Fetch current URL
+
+      getRedirectUrl()
+
         .then(url => {
-          const finalUrl = url.trim() || DEFAULT_URL;
-          currentUrlEl.href = finalUrl;
-          currentUrlEl.textContent = finalUrl;
-          inputEl.value = finalUrl;
+
+          currentUrl.href = url;
+
+          currentUrl.textContent = url;
+
+          input.value = url;
+
         })
-        .catch(() => {
-          currentUrlEl.href = DEFAULT_URL;
-          currentUrlEl.textContent = DEFAULT_URL;
-          inputEl.value = DEFAULT_URL;
+
+        .catch(err => {
+
+          currentUrl.textContent = "Unable to load URL";
+
+          status.style.color = "red";
+
+          status.textContent = err.message;
+
         });
 
-      // Update the universal truth
-      document.getElementById('admin-form').addEventListener('submit', async function (e) {
-        e.preventDefault();
-        msgEl.style.color = 'black';
-        msgEl.textContent = 'Saving universally...';
 
-        let target = inputEl.value.trim();
-        if (!/^https?:\/\//i.test(target)) {
-          target = 'https://' + target;
-        }
+      // Save new URL
 
-        const writeKey = writeKeyEl.value.trim();
-        if (writeKey) {
-          localStorage.setItem('kvdb_write_key', writeKey);
-        }
+      document.getElementById("admin-form")
 
-        try {
-          const urlWithToken = writeKey ? `${KV_URL}?access_token=${encodeURIComponent(writeKey)}` : KV_URL;
-          const headers = writeKey ? { 'Authorization': `Bearer ${writeKey}` } : {};
+        .addEventListener("submit", async function(e) {
 
-          const res = await fetch(urlWithToken, {
-            method: 'POST',
-            headers: headers,
-            body: target
-          });
+          e.preventDefault();
 
-          if (res.ok) {
-            currentUrlEl.href = target;
-            currentUrlEl.textContent = target;
-            inputEl.value = target;
-            msgEl.style.color = 'green';
-            msgEl.textContent = 'Saved! All visitors worldwide will now be redirected to this link.';
-          } else {
-            const errText = await res.text();
-            throw new Error(`HTTP ${res.status} (${res.statusText}): ${errText || 'Write permission denied'}`);
+          const target = input.value.trim();
+
+          const key = accessKey.value.trim();
+
+
+          if (!validateURL(target)) {
+
+            status.style.color = "red";
+
+            status.textContent =
+              "Please enter a valid HTTP/HTTPS URL.";
+
+            return;
+
           }
-        } catch (err) {
-          msgEl.style.color = 'red';
-          msgEl.textContent = `Error: ${err.message}`;
-          console.error('Save error:', err);
-        }
-      });
-    } else {
-      // Route is / -> fetch universal truth and redirect immediately
-      document.getElementById('redirect-view').style.display = 'block';
-      const destLink = document.getElementById('dest-link');
 
-      fetch(KV_URL)
-        .then(res => res.ok ? res.text() : DEFAULT_URL)
-        .then(url => {
-          const target = url.trim() || DEFAULT_URL;
-          destLink.href = target;
-          destLink.textContent = target;
-          window.location.replace(target);
-        })
-        .catch(() => {
-          destLink.href = DEFAULT_URL;
-          destLink.textContent = DEFAULT_URL;
-          window.location.replace(DEFAULT_URL);
+
+          if (!key) {
+
+            status.style.color = "red";
+
+            status.textContent =
+              "Please enter your JSONBin Access Key.";
+
+            return;
+
+          }
+
+
+          status.style.color = "black";
+
+          status.textContent = "Saving...";
+
+
+          try {
+
+            await updateRedirectUrl(target, key);
+
+            currentUrl.href = target;
+
+            currentUrl.textContent = target;
+
+            status.style.color = "green";
+
+            status.textContent =
+              "Successfully saved! All visitors will now use the new URL.";
+
+            accessKey.value = "";
+
+          }
+
+          catch(err) {
+
+            status.style.color = "red";
+
+            status.textContent =
+              "Error: " + err.message;
+
+            console.error(err);
+
+          }
+
         });
-    }
-  </script>
-</body>
 
+    }
+
+
+    // ==================================
+    // REDIRECT PAGE
+    // ==================================
+
+    else {
+
+      document.getElementById("redirect-view").style.display =
+        "block";
+
+      const destLink =
+        document.getElementById("dest-link");
+
+
+      getRedirectUrl()
+
+        .then(url => {
+
+          destLink.href = url;
+
+          destLink.textContent = url;
+
+          window.location.replace(url);
+
+        })
+
+        .catch(err => {
+
+          console.error(err);
+
+          destLink.href = DEFAULT_URL;
+
+          destLink.textContent = DEFAULT_URL;
+
+          window.location.replace(DEFAULT_URL);
+
+        });
+
+    }
+
+  </script>
+
+</body>
 </html>
